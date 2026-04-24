@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "henrikkvamme-plugins",
+  "description": "Claude Code plugins by Henrik Halvorsen Kvamme",
+  "owner": {
+    "name": "Henrik Halvorsen Kvamme"
+  },
+  "metadata": {
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "dokploy",
+      "source": "./plugins/dokploy",
+      "description": "Deploy and manage applications, databases, env vars, domains, and backups on a self-hosted Dokploy instance. Curl-based, no third-party MCP or CLI dependencies.",
+      "category": "devops",
+      "tags": ["dokploy", "vps", "deploy", "postgres", "mysql", "redis", "backup", "infrastructure"],
+      "homepage": "https://github.com/henrikkvamme/dokploy-claude-plugin"
+    }
+  ]
+}

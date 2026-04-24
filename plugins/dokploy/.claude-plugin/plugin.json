@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "dokploy",
+  "version": "0.1.0",
+  "description": "Deploy and manage applications, databases, env vars, domains, and backups on a self-hosted Dokploy instance.",
+  "author": {
+    "name": "Henrik Halvorsen Kvamme",
+    "url": "https://github.com/henrikkvamme"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/henrikkvamme/dokploy-claude-plugin",
+  "repository": "https://github.com/henrikkvamme/dokploy-claude-plugin",
+  "keywords": ["dokploy", "vps", "deploy", "postgres", "mysql", "redis", "backup", "infrastructure", "devops"]
+}

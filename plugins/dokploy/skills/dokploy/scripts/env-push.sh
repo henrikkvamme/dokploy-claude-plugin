@@ -45,19 +45,28 @@ PAYLOAD=$(jq -n \
     --arg id "$APP_ID" \
     --arg env "$ENV_VARS" \
     --arg buildArgs "$BUILD_ARGS" \
-    '{applicationId: $id, env: $env, buildArgs: $buildArgs}')
+    '{applicationId: $id, env: $env, buildArgs: $buildArgs, buildSecrets: "", createEnvFile: true}')
 
 # Print keys only (never values) so transcripts/logs don't leak secrets
 echo "→ Pushing env to $APP_ID" >&2
 echo "  env keys:"       >&2
-echo "$ENV_VARS"   | grep -oE '^[^=]+' | sed 's/^/    /' >&2
+echo "$ENV_VARS"   | { grep -oE '^[^=]+' || true; } | sed 's/^/    /' >&2
 echo "  buildArg keys:"  >&2
-echo "$BUILD_ARGS" | grep -oE '^[^=]+' | sed 's/^/    /' >&2
+echo "$BUILD_ARGS" | { grep -oE '^[^=]+' || true; } | sed 's/^/    /' >&2
 
-curl -sS --fail-with-body -X POST "$API/application.saveEnvironment" \
+RESP=$(curl -sS -w '\n%{http_code}' -X POST "$API/application.saveEnvironment" \
     -H "$AUTH_HEADER" \
     -H 'Content-Type: application/json' \
-    -d "$PAYLOAD" \
-    | jq -r 'if .applicationId then "✓ Saved (applicationId: " + .applicationId + ")" else . end'
+    -d "$PAYLOAD")
+HTTP=${RESP##*$'\n'}
+BODY=${RESP%$'\n'*}
 
-echo "→ Env var changes do NOT auto-deploy. Run scripts/deploy.sh $APP_ID to apply." >&2
+if [[ "$HTTP" == "200" && ( "$BODY" == "true" || "$BODY" == *'"applicationId"'* ) ]]; then
+    echo "✓ Saved env (HTTP 200)" >&2
+    echo "→ Env var changes do NOT auto-deploy. Run scripts/deploy.sh $APP_ID to apply." >&2
+else
+    echo "✗ saveEnvironment FAILED (HTTP $HTTP)" >&2
+    echo "  Response: $BODY" >&2
+    echo "  Common cause: payload missing 'createEnvFile' field (zod rejects)." >&2
+    exit 1
+fi

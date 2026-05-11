@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "dokploy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Deploy and manage applications, databases, env vars, domains, and backups on a self-hosted Dokploy instance.",
   "author": {
     "name": "Henrik Halvorsen Kvamme",

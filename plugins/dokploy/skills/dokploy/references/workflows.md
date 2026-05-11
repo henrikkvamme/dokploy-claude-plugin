@@ -44,14 +44,22 @@ See `api.md` for full endpoint tables and `footguns.md` before touching resource
      -d "{\"applicationId\":\"$APP_ID\",\"repository\":\"my-repo\",\"owner\":\"my-user\",\"branch\":\"main\",\"githubId\":\"$GITHUB_ID\",\"buildPath\":\"/\"}"
    ```
 
-6. **Set build type**
+6. **Set build type** — `application.saveBuildType` is broken (returns success without persisting). Use `application.update` instead. See `footguns.md`.
    ```bash
-   curl -sS -X POST "$DOKPLOY_URL/api/application.saveBuildType" \
+   curl -sS -X POST "$DOKPLOY_URL/api/application.update" \
      -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
-     -d "{\"applicationId\":\"$APP_ID\",\"buildType\":\"dockerfile\",\"dockerfile\":\"./Dockerfile\"}"
+     -d "{\"applicationId\":\"$APP_ID\",\"buildType\":\"dockerfile\",\"dockerfile\":\"Dockerfile\",\"dockerContextPath\":\"/\"}"
    ```
 
-7. **Add domain**
+7. **Add persistent volume (if the container writes state)** — SQLite, uploads, caches. Skip if the app is stateless.
+   ```bash
+   curl -sS -X POST "$DOKPLOY_URL/api/mounts.create" \
+     -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
+     -d "{\"type\":\"volume\",\"volumeName\":\"myapp-data\",\"mountPath\":\"/app/data\",\"serviceType\":\"application\",\"serviceId\":\"$APP_ID\"}"
+   ```
+   Note `serviceId` (not `applicationId`). See `api.md` for bind / file mount variants.
+
+8. **Add domain**
    ```bash
    curl -sS -X POST "$DOKPLOY_URL/api/domain.create" \
      -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
@@ -59,12 +67,13 @@ See `api.md` for full endpoint tables and `footguns.md` before touching resource
    ```
    DNS must point to the VPS first (A record → server IP).
 
-8. **Push env vars** — use `scripts/env-push.sh` (handles `NEXT_PUBLIC_*` auto-split).
+9. **Push env vars** — use `scripts/env-push.sh` (handles framework public-var auto-split). **Important**: don't pipe its output through `tail` / `head` — error messages from the API can get truncated and a failed save looks identical to a silent success. Read the full output.
 
-9. **Deploy**
-   ```bash
-   scripts/deploy.sh "$APP_ID"
-   ```
+10. **Deploy**
+    ```bash
+    scripts/deploy.sh "$APP_ID"
+    ```
+    Verify the container actually starts: a "done" application status only means the build/swarm-create finished. The container can still crashloop on missing env. Check `docker service ps <appName>` over SSH if the domain returns 502.
 
 ---
 

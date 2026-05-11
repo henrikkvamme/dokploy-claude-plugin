@@ -4,6 +4,46 @@ Known bugs, API sharp edges, and production gotchas. Read before first deploy.
 
 ---
 
+## `application.saveBuildType` silently no-ops
+
+`POST /api/application.saveBuildType` returns 200 OK but does NOT persist `buildType` or `dockerfile`. The application keeps whatever was inferred at create-time (usually `nixpacks`). There's no error to catch.
+
+**Workaround**: set build type via `application.update` instead:
+
+```bash
+curl -sS -X POST "$DOKPLOY_URL/api/application.update" \
+  -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"applicationId\":\"$APP_ID\",\"buildType\":\"dockerfile\",\"dockerfile\":\"Dockerfile\",\"dockerContextPath\":\"/\"}"
+```
+
+Always verify with `application.one` — if `buildType` is still `nixpacks` after a `save`, the save didn't take.
+
+---
+
+## `application.saveEnvironment` requires every field, including `createEnvFile`
+
+The endpoint's zod schema is non-optional for `createEnvFile`. Omitting it returns:
+
+```
+400 BAD_REQUEST  createEnvFile: Invalid input: expected nonoptional, received undefined
+```
+
+Always pass `{applicationId, env, buildArgs, buildSecrets, createEnvFile}` with **all five** fields. Use empty strings for fields you don't need. `scripts/env-push.sh` handles this.
+
+---
+
+## "deploy done" ≠ "container running"
+
+`applicationStatus: "done"` only means the build+swarm-create finished. The container can immediately crashloop on missing env (e.g., `BetterAuthError: default secret`). The Dokploy dashboard will happily show a green deploy while Traefik returns 502 for the domain.
+
+After every first-time deploy:
+
+1. `curl -sSI https://<domain>/` — expect 200/30x, not 502.
+2. If 502, check `ssh vps "docker service ps <appName>"` for `Failed` tasks.
+3. `docker service logs <appName> --tail 40` shows the crash reason.
+
+---
+
 ## Bug #927 — Resource limits break deploys
 
 **Never set `cpuLimit` or `memoryLimit` via the API or MCP on any resource (apps or databases).**

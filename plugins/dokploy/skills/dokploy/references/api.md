@@ -31,7 +31,7 @@ Header: `x-api-key: $DOKPLOY_TOKEN`
 | `application.update` | POST | config fields only (see below) — **do not** use for env/buildArgs |
 | `application.saveEnvironment` | POST | `{applicationId, env, buildArgs, buildSecrets, createEnvFile}` |
 | `application.saveGithubProvider` | POST | `{applicationId, repository, owner, branch, githubId, buildPath}` |
-| `application.saveBuildType` | POST | `{applicationId, buildType, dockerfile?}` |
+| `application.saveBuildType` | POST | ⚠️ returns success but **does not persist** — use `application.update` with `buildType` instead. See footguns. |
 | `application.deploy` | POST | `{applicationId}` |
 | `application.redeploy` | POST | `{applicationId}` |
 | `application.stop` | POST | `{applicationId}` |
@@ -54,7 +54,7 @@ Header: `x-api-key: $DOKPLOY_TOKEN`
 
 ### `application.saveEnvironment` fields
 
-All env-style fields are newline-separated `KEY=value` strings.
+All env-style fields are newline-separated `KEY=value` strings. **All fields below are required** — the API rejects payloads missing any of them with a 400 zod error. Pass empty strings (`""`) for fields you don't need.
 
 | Field | Purpose |
 |---|---|
@@ -62,7 +62,36 @@ All env-style fields are newline-separated `KEY=value` strings.
 | `env` | Runtime env vars (container start) |
 | `buildArgs` | Docker build args — **`NEXT_PUBLIC_*` vars MUST go here**, see footguns |
 | `buildSecrets` | Docker build secrets |
-| `createEnvFile` | Bool — write env vars to `.env` in container |
+| `createEnvFile` | Bool — write env vars to `.env` in container. **Required field**, not optional. |
+
+## Volume mounts
+
+Mount endpoints live at `mounts.*` (plural) and use `serviceId` + `serviceType`, **not** `applicationId`. Not obvious from naming — easy to miss.
+
+| Endpoint | Method | Body |
+|---|---|---|
+| `mounts.create` | POST | `{type, mountPath, serviceType, serviceId, volumeName?, hostPath?, filePath?, content?}` |
+
+### `mounts.create` fields
+
+| Field | Example | Notes |
+|---|---|---|
+| `type` | `"volume"` | `volume`, `bind`, `file` |
+| `mountPath` | `"/app/data"` | Path inside the container |
+| `serviceType` | `"application"` | `application`, `postgres`, `mysql`, `redis`, `mongo`, `mariadb`, `compose`, `libsql` |
+| `serviceId` | `"$APP_ID"` | The `applicationId` (or `postgresId`, etc.) — name doesn't match the field |
+| `volumeName` | `"myapp-data"` | Required when `type=volume` |
+| `hostPath` | `"/host/path"` | Required when `type=bind` |
+| `filePath`, `content` | — | Required when `type=file` |
+
+Example — attach a persistent volume to an application:
+```bash
+curl -sS -X POST "$DOKPLOY_URL/api/mounts.create" \
+  -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"type\":\"volume\",\"volumeName\":\"myapp-data\",\"mountPath\":\"/app/data\",\"serviceType\":\"application\",\"serviceId\":\"$APP_ID\"}"
+```
+
+Mounts only take effect on the next deploy.
 
 ## Domains
 

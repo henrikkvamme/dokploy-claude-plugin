@@ -44,6 +44,37 @@ After every first-time deploy:
 
 ---
 
+## ACME cert stuck after a failed initial order
+
+If the first ACME order fails (most commonly DNS `NXDOMAIN` because the A record isn't live yet when the domain is created), Traefik does **not** reliably recover later — even once DNS works. The TLS endpoint keeps serving `CN=TRAEFIK DEFAULT CERT` and `curl https://<domain>` returns `SSL certificate problem: unable to get local issuer certificate`.
+
+Symptoms in `docker logs dokploy-traefik`:
+- Original error: `Unable to obtain ACME certificate ... NXDOMAIN looking up A for <host>`
+- Later retry: `Cannot retrieve the ACME challenge for <host> (token "<real-looking-token>")` — Traefik's solver no longer has the token by the time LE validates.
+
+**Fix**: delete and re-create the domain via the API. This regenerates the router config with a new `uniqueConfigKey`, which triggers a fresh ACME order. Cert issues within seconds.
+
+```bash
+curl -sS -X POST "$DOKPLOY_URL/api/domain.delete" \
+  -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"domainId\":\"$DOMAIN_ID\"}"
+
+curl -sS -X POST "$DOKPLOY_URL/api/domain.create" \
+  -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"host\":\"<host>\",\"applicationId\":\"$APP_ID\",\"port\":80,\"https\":true,\"certificateType\":\"letsencrypt\"}"
+```
+
+**Avoidance**: confirm `dig +short <host>` returns the VPS IP **before** calling `domain.create`. For freshly-registered domains (especially `.no`, where delegation can lag), wait until DNS resolves before wiring the domain into Dokploy.
+
+Verify the issued cert:
+```bash
+echo | openssl s_client -connect <vps-ip>:443 -servername <host> 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+# expect issuer=C=US, O=Let's Encrypt, CN=R1x — not CN=TRAEFIK DEFAULT CERT
+```
+
+---
+
 ## Bug #927 — Resource limits break deploys
 
 **Never set `cpuLimit` or `memoryLimit` via the API or MCP on any resource (apps or databases).**

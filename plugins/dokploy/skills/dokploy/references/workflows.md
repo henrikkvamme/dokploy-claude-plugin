@@ -8,15 +8,17 @@ See `api.md` for full endpoint tables and `footguns.md` before touching resource
 
 ## Host a new project
 
-1. **Create project**
+1. **Create project** — response is wrapped: `{project: {...}, environment: {...}}`. Grab both ids in one shot:
    ```bash
-   curl -sS -X POST "$DOKPLOY_URL/api/project.create" \
+   RESP=$(curl -sS -X POST "$DOKPLOY_URL/api/project.create" \
      -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
-     -d '{"name":"my-project","description":"..."}'
+     -d '{"name":"my-project","description":"..."}')
+   PROJECT_ID=$(echo "$RESP" | jq -r '.project.projectId')
+   ENV_ID=$(echo "$RESP" | jq -r '.environment.environmentId')
    ```
-   Save the returned `projectId`.
+   **Gotcha**: `jq -r '.projectId'` on this response returns `null` (the field is `.project.projectId`). If you retry without checking, you'll silently create a duplicate project. Always verify `PROJECT_ID` is non-null before the next call.
 
-2. **Get `environmentId`** — each project has a default "production" env.
+2. **(Alternative) Look up `environmentId` later** — `project.one` returns the project with its environments array:
    ```bash
    curl -sS -G "$DOKPLOY_URL/api/project.one" \
      --data-urlencode "projectId=$PROJECT_ID" \
@@ -59,13 +61,14 @@ See `api.md` for full endpoint tables and `footguns.md` before touching resource
    ```
    Note `serviceId` (not `applicationId`). See `api.md` for bind / file mount variants.
 
-8. **Add domain**
+8. **Add domain** — DNS must resolve to the VPS **before** this call, or Let's Encrypt fails with `NXDOMAIN` and the cert gets stuck (see `footguns.md` → "ACME cert stuck after a failed initial order").
    ```bash
+   dig +short <host>   # must return the VPS IP
    curl -sS -X POST "$DOKPLOY_URL/api/domain.create" \
      -H "x-api-key: $DOKPLOY_TOKEN" -H 'Content-Type: application/json' \
      -d "{\"host\":\"myapp.example.com\",\"applicationId\":\"$APP_ID\",\"port\":3000,\"https\":true,\"certificateType\":\"letsencrypt\"}"
    ```
-   DNS must point to the VPS first (A record → server IP).
+   If DNS wasn't ready when the domain was first added: delete and re-create it once DNS resolves — that forces a fresh ACME order.
 
 9. **Push env vars** — use `scripts/env-push.sh` (handles framework public-var auto-split). **Important**: don't pipe its output through `tail` / `head` — error messages from the API can get truncated and a failed save looks identical to a silent success. Read the full output.
 
